@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GoogleUserInfo {
+    #[serde(alias = "sub")]
     pub id: String,
     pub email: String,
     pub name: String,
@@ -28,6 +29,7 @@ pub struct CloudConfig {
     pub last_updated: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DriveFileMetadata {
     pub id: String,
@@ -37,6 +39,8 @@ pub struct DriveFileMetadata {
 pub async fn verify_google_token(token: &str) -> Result<GoogleUserInfo, String> {
     let client = reqwest::Client::new();
     
+    println!("🌐 Calling Google userinfo API...");
+    
     let response = client
         .get("https://www.googleapis.com/oauth2/v3/userinfo")
         .bearer_auth(token)
@@ -44,13 +48,26 @@ pub async fn verify_google_token(token: &str) -> Result<GoogleUserInfo, String> 
         .await
         .map_err(|e| format!("Failed to verify token: {}", e))?;
     
-    if !response.status().is_success() {
-        return Err("Invalid token".to_string());
+    let status = response.status();
+    println!("📡 Google API response status: {}", status);
+    
+    if !status.is_success() {
+        let error_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        println!("❌ Google API error: {}", error_body);
+        return Err(format!("Invalid token ({}): {}", status, error_body));
     }
     
-    let user_info: GoogleUserInfo = response
-        .json()
+    let response_text = response
+        .text()
         .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+    
+    println!("📄 Response body: {}", response_text);
+    
+    let user_info: GoogleUserInfo = serde_json::from_str(&response_text)
         .map_err(|e| format!("Failed to parse user info: {}", e))?;
     
     Ok(user_info)

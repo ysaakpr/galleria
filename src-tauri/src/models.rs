@@ -32,6 +32,7 @@ pub struct CompressedImage {
 }
 
 impl S3Config {
+    #[allow(dead_code)]
     pub fn is_configured(&self) -> bool {
         !self.bucket.is_empty()
             && !self.region.is_empty()

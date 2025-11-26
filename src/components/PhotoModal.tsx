@@ -1,5 +1,8 @@
 import { useState } from 'react'
+import { X, Trash2, Download, Share2, Info } from 'lucide-react'
 import { Photo, useGalleryStore } from '../store/galleryStore'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
 
 interface PhotoModalProps {
   photo: Photo
@@ -10,6 +13,7 @@ export default function PhotoModal({ photo, onClose }: PhotoModalProps) {
   const { deletePhoto } = useGalleryStore()
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -36,78 +40,120 @@ export default function PhotoModal({ photo, onClose }: PhotoModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+        className="glass max-w-7xl w-full max-h-[95vh] flex flex-col rounded-2xl overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-800 truncate flex-1 mr-4">
-            {photo.original_name}
-          </h3>
+        <div className="glass-header flex items-center justify-between p-4">
+          <div className="flex items-center space-x-3 flex-1 mr-4">
+            <h3 className="text-lg font-semibold truncate">
+              {photo.original_name}
+            </h3>
+            <Badge variant="secondary" className="text-xs">
+              {photo.width} × {photo.height}
+            </Badge>
+          </div>
+          
           <div className="flex items-center space-x-2">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowInfo(!showInfo)}
+              className="rounded-full"
+            >
+              <Info className="w-5 h-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+            >
+              <Share2 className="w-5 h-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+            >
+              <Download className="w-5 h-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete"
+              className="rounded-full text-destructive hover:text-destructive"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </button>
-            <button
+              <Trash2 className="w-5 h-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onClose}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="rounded-full"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+              <X className="w-5 h-5" />
+            </Button>
           </div>
         </div>
 
-        {/* Image */}
-        <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center p-4">
-          <img
-            src={photo.large_url || photo.original_url}
-            alt={photo.original_name}
-            className="max-w-full max-h-full object-contain"
-          />
-        </div>
-
-        {/* Footer with metadata */}
-        <div className="p-4 border-t bg-gray-50">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500 block">Dimensions</span>
-              <span className="font-medium">{photo.width} × {photo.height}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">File Size</span>
-              <span className="font-medium">{formatFileSize(photo.file_size)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Uploaded</span>
-              <span className="font-medium">{formatDate(photo.upload_date)}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block">Format</span>
-              <span className="font-medium">JPEG</span>
-            </div>
+        {/* Main content with image and optional info panel */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Image */}
+          <div className="flex-1 bg-black/20 backdrop-blur-sm flex items-center justify-center p-6">
+            <img
+              src={photo.large_url || photo.original_url}
+              alt={photo.original_name}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            />
           </div>
+
+          {/* Info Panel */}
+          {showInfo && (
+            <div className="w-80 glass-card p-6 overflow-auto animate-slide-right">
+              <h4 className="font-semibold text-lg mb-4">Photo Details</h4>
+              
+              <div className="space-y-4">
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Dimensions</span>
+                  <p className="font-medium text-lg">{photo.width} × {photo.height}</p>
+                </div>
+                
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">File Size</span>
+                  <p className="font-medium text-lg">{formatFileSize(photo.file_size)}</p>
+                </div>
+                
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Uploaded</span>
+                  <p className="font-medium">{formatDate(photo.upload_date)}</p>
+                </div>
+                
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Format</span>
+                  <p className="font-medium">JPEG (Optimized)</p>
+                </div>
+
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">Available Sizes</span>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Badge variant="outline">Thumbnail</Badge>
+                    <Badge variant="outline">Small</Badge>
+                    <Badge variant="outline">Medium</Badge>
+                    <Badge variant="outline">Large</Badge>
+                    <Badge variant="outline">Original</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

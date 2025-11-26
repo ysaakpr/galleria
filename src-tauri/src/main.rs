@@ -6,6 +6,7 @@ mod s3_uploader;
 mod models;
 mod database;
 mod auth;
+mod oauth;
 
 use tauri::{Manager, Emitter};
 use std::sync::Arc;
@@ -54,20 +55,27 @@ async fn google_login(
 ) -> Result<auth::AuthSession, String> {
     use chrono::Utc;
     
+    println!("🔐 Google login called with token: {}...", &token[..token.len().min(30)]);
+    
     // Verify Google token and get user info
-    let user_info = auth::verify_google_token(&token).await?;
+    let user_info = match auth::verify_google_token(&token).await {
+        Ok(info) => {
+            println!("✅ Token verified successfully: {} ({})", info.name, info.email);
+            info
+        }
+        Err(e) => {
+            println!("❌ Token verification failed: {}", e);
+            return Err(format!("Token verification failed: {}", e));
+        }
+    };
     
     // Get database connection
-    let db_path = database::get_db_path(&app_handle)?;
-    let db = tauri_plugin_sql::Builder::default()
-        .build()
-        .build(&app_handle)
-        .map_err(|e| format!("Database connection failed: {}", e))?;
+    let _db_path = database::get_db_path(&app_handle)?;
     
     let now = Utc::now().to_rfc3339();
     
     // Check if user exists
-    let query = format!(
+    let _query = format!(
         "SELECT id, s3_bucket, s3_region FROM users WHERE google_id = '{}'",
         user_info.id
     );
@@ -76,7 +84,7 @@ async fn google_login(
     let has_s3_config: bool;
     
     // Insert or update user
-    let insert_query = format!(
+    let _insert_query = format!(
         "INSERT INTO users (google_id, email, name, picture_url, created_at, last_login) \
          VALUES ('{}', '{}', '{}', {}, '{}', '{}') \
          ON CONFLICT(google_id) DO UPDATE SET \
@@ -96,6 +104,9 @@ async fn google_login(
     user_id = 1; // This would come from the database query
     has_s3_config = false;
     
+    // Check if user has Drive access
+    let has_drive_access = auth::check_drive_access(&token).await;
+    
     // Store current user in app state
     let state = app_handle.state::<AppState>();
     *state.current_user_id.lock().await = Some(user_id);
@@ -107,6 +118,7 @@ async fn google_login(
         name: user_info.name,
         picture_url: user_info.picture,
         has_s3_config,
+        has_drive_access,
     })
 }
 
@@ -121,10 +133,10 @@ async fn configure_s3(
     let state = app_handle.state::<AppState>();
     let user_id = state.current_user_id.lock().await;
     
-    let user_id = user_id.ok_or("Not logged in")?;
+    let _user_id = user_id.ok_or("Not logged in")?;
     
     // Update user's S3 configuration in database
-    let db_path = database::get_db_path(&app_handle)?;
+    let _db_path = database::get_db_path(&app_handle)?;
     
     // Store configuration
     let config = models::S3Config {
@@ -146,7 +158,7 @@ async fn upload_photos(
 ) -> Result<Vec<models::PhotoMetadata>, String> {
     let state = app_handle.state::<AppState>();
     let user_id = state.current_user_id.lock().await;
-    let user_id = user_id.ok_or("Not logged in")?;
+    let _user_id = user_id.ok_or("Not logged in")?;
     
     let config = app_handle.state::<Arc<Mutex<models::S3Config>>>();
     let config = config.lock().await;
@@ -202,8 +214,7 @@ async fn list_photos(
     app_handle: tauri::AppHandle,
 ) -> Result<Vec<models::PhotoMetadata>, String> {
     let state = app_handle.state::<AppState>();
-    let user_id = state.current_user_id.lock().await;
-    let _user_id = user_id.ok_or("Not logged in")?;
+    let _user_id = state.current_user_id.lock().await;
     
     // If using cache, try to get from database first
     if use_cache {
@@ -250,6 +261,76 @@ async fn get_cached_image_url(
     // Return cached URL if available and recently accessed
     // This reduces S3 GET requests
     Ok(None) // TODO: Implement cache lookup
+}
+
+#[tauri::command]
+async fn complete_oauth_flow(client_id: String) -> Result<String, String> {
+    println!("Starting OAuth flow with client_id: {}", client_id);
+    
+    // Start the OAuth server FIRST
+    let server = oauth::OAuthServer::new();
+    
+    // Clone server for the async task
+    let server_clone = server.clone();
+    
+    // Spawn server in background
+    let server_task = tokio::spawn(async move {
+        println!("OAuth server starting...");
+        server_clone.start_and_wait().await
+    });
+    
+    // Wait a bit for server to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Build OAuth URL
+    let url = oauth::build_oauth_url(&client_id);
+    println!("Opening browser with URL: {}", url);
+    
+    // Open the OAuth URL in the system browser
+    let open_result = {
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(&url)
+                .spawn()
+        }
+        
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("cmd")
+                .args(&["/C", "start", &url])
+                .spawn()
+        }
+        
+        #[cfg(target_os = "linux")]
+        {
+            std::process::Command::new("xdg-open")
+                .arg(&url)
+                .spawn()
+        }
+    };
+    
+    if let Err(e) = open_result {
+        return Err(format!("Failed to open browser: {}", e));
+    }
+    
+    println!("Browser opened, waiting for callback...");
+    
+    // Wait for the server to receive the token
+    match server_task.await {
+        Ok(Ok(token)) => {
+            println!("Token received successfully!");
+            Ok(token)
+        }
+        Ok(Err(e)) => {
+            println!("Server error: {}", e);
+            Err(e)
+        }
+        Err(e) => {
+            println!("Task error: {}", e);
+            Err(format!("Server task failed: {}", e))
+        }
+    }
 }
 
 #[tauri::command]
@@ -358,6 +439,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             init_database,
             google_login,
+            complete_oauth_flow,
             configure_s3,
             upload_photos,
             list_photos,

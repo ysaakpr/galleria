@@ -96,7 +96,8 @@ pub async fn list_photos(
     
     let mut photos = Vec::new();
     
-    if let Some(contents) = response.contents() {
+    let contents = response.contents();
+    if !contents.is_empty() {
         for object in contents {
             if let Some(key) = object.key() {
                 let get_response = client
@@ -150,8 +151,11 @@ pub async fn delete_photo(
 }
 
 async fn create_s3_client(config: &S3Config) -> Result<Client, Box<dyn std::error::Error>> {
+    use aws_sdk_s3::config::Region;
+    
+    let region = Region::new(config.region.clone());
     let region_provider = RegionProviderChain::default_provider()
-        .or_else(&config.region);
+        .or_else(region);
     
     let sdk_config = aws_config::defaults(BehaviorVersion::latest())
         .region(region_provider)
