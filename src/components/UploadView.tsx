@@ -1,20 +1,27 @@
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { open } from '@tauri-apps/plugin-dialog'
-import { Upload, Image as ImageIcon, Sparkles } from 'lucide-react'
+import { Upload, Image as ImageIcon, Sparkles, AlertCircle, Settings } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent } from './ui/card'
+import { useAuth } from '../hooks/useAuth'
 
 interface UploadViewProps {
   onUpload: (files: File[]) => void
+  onNavigateToSettings: () => void
 }
 
-export default function UploadView({ onUpload }: UploadViewProps) {
+export default function UploadView({ onUpload, onNavigateToSettings }: UploadViewProps) {
+  const { user } = useAuth()
+  
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
+      if (!user?.hasS3Config) {
+        return // Don't upload if S3 is not configured
+      }
       onUpload(acceptedFiles)
     }
-  }, [onUpload])
+  }, [onUpload, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -25,6 +32,10 @@ export default function UploadView({ onUpload }: UploadViewProps) {
   })
 
   const handleBrowse = async () => {
+    if (!user?.hasS3Config) {
+      return // Don't open dialog if S3 is not configured
+    }
+    
     try {
       const selected = await open({
         multiple: true,
@@ -46,6 +57,46 @@ export default function UploadView({ onUpload }: UploadViewProps) {
     } catch (error) {
       console.error('Failed to open file dialog:', error)
     }
+  }
+
+  // Show configuration warning if S3 is not configured
+  if (!user?.hasS3Config) {
+    return (
+      <div className="h-full flex items-center justify-center p-8">
+        <Card className="glass-card max-w-2xl w-full">
+          <CardContent className="p-12 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center">
+              <AlertCircle className="w-12 h-12 text-amber-600 dark:text-amber-400" />
+            </div>
+            
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-3">
+              S3 Storage Not Configured
+            </h2>
+            
+            <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
+              Before you can upload photos, you need to configure your Amazon S3 storage credentials. 
+              This ensures your photos are securely stored in your own S3 bucket.
+            </p>
+
+            <Button
+              onClick={onNavigateToSettings}
+              size="lg"
+              className="bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-700 hover:to-purple-700 text-white text-lg px-8 py-6 shadow-xl"
+            >
+              <Settings className="w-6 h-6 mr-2" />
+              Go to Settings
+            </Button>
+
+            <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                <strong>💡 Why S3?</strong> Using your own S3 bucket gives you complete control over your data 
+                and keeps storage costs minimal.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

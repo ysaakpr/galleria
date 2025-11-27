@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Image, Folder, Users, Upload, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
@@ -6,12 +5,11 @@ import { Button } from './ui/button'
 interface SidebarProps {
   currentView: string
   onViewChange: (view: string) => void
-  onOpenConfig: () => void
 }
 
-export default function Sidebar({ currentView, onViewChange, onOpenConfig }: SidebarProps) {
+export default function Sidebar({ currentView, onViewChange }: SidebarProps) {
   const menuItems = [
-    { id: 'photos', label: 'Photos', icon: Image },
+    { id: 'photos', label: 'All Images', icon: Image },
     { id: 'albums', label: 'Albums', icon: Folder },
     { id: 'people', label: 'People', icon: Users },
   ]
@@ -58,14 +56,18 @@ export default function Sidebar({ currentView, onViewChange, onOpenConfig }: Sid
 
       {/* Settings at bottom */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <Button
-          variant="ghost"
-          onClick={onOpenConfig}
-          className="w-full justify-start"
+        <button
+          onClick={() => onViewChange('settings')}
+          className={cn(
+            "w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all text-left",
+            currentView === 'settings'
+              ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-semibold"
+              : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+          )}
         >
-          <Settings className="w-5 h-5 mr-2" />
-          Settings
-        </Button>
+          <Settings className={cn("w-5 h-5", currentView === 'settings' && "text-primary-600")} />
+          <span>Settings</span>
+        </button>
       </div>
     </aside>
   )
